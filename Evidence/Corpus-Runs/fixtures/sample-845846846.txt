@@ -1,0 +1,13 @@
+Replay The Battle for Hill 218 #845846846
+Choose your point of view:
+1st
+Alice
+Choose this player
+2nd
+Bob
+Choose this player
+Game log
+Move 1 :
+Alice placed a Infantry card at 1,1
+Move 2 :
+Bob placed a Infantry card at 0,-1

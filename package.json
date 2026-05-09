@@ -1,0 +1,11 @@
+{
+  "name": "hill-218-coach-for-bga",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only Chrome extension beta for tracking visible Battle for Hill 218 cards on Board Game Arena.",
+  "scripts": {
+    "test": "node --test extension/tests/cardModel.test.js",
+    "check:syntax": "node --check extension/src/cardModel.js && node --check extension/src/content.js && node --check scripts/bga_gamereview_corpus.js",
+    "package:zip": "rm -f dist/hill-218-coach-for-bga-v0.1.0.zip && cd extension && zip -r ../dist/hill-218-coach-for-bga-v0.1.0.zip manifest.json src"
+  }
+}
