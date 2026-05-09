@@ -2,3 +2,15 @@ node_modules/
 *.log
 .DS_Store
 dist/*.zip
+.env
+.env.*
+*.pem
+*.key
+*.p12
+auth.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.tar
+*.tar.gz
+*.tgz
