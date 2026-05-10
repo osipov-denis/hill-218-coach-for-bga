@@ -3,14 +3,14 @@
   top: 72px;
   right: 16px;
   z-index: 2147483647;
-  width: min(420px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
   min-width: 300px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 96px);
   color: #e8ecff;
   background: rgba(15, 18, 28, 0.97);
   border: 1px solid rgba(126, 155, 255, 0.45);
-  border-radius: 14px;
+  border-radius: 10px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
@@ -25,16 +25,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: linear-gradient(135deg, rgba(54, 74, 145, 0.95), rgba(25, 31, 52, 0.95));
+  padding: 9px 12px;
+  background: rgba(25, 31, 52, 0.98);
 }
 .hill218-subtitle { opacity: 0.72; font-size: 11px; flex: 1; }
-#hill218-minimize, #hill218-scan, #hill218-parse, #hill218-sample, #hill218-copy-diag, #hill218-clear {
+#hill218-minimize, #hill218-scan, #hill218-parse, #hill218-sample, #hill218-copy-diag, #hill218-clear, #hill218-copy-status {
   color: #fff;
   background: #3f63ff;
   border: 0;
-  border-radius: 8px;
-  padding: 5px 9px;
+  border-radius: 7px;
+  padding: 6px 10px;
   cursor: pointer;
   font-size: 12px;
 }
@@ -44,14 +44,18 @@
   background: rgba(126, 155, 255, 0.18);
   color: #cfd7ff;
   border: 1px solid rgba(126, 155, 255, 0.28);
-  padding: 4px 7px;
+  padding: 6px 9px;
   font-size: 11px;
 }
-.hill218-user-actions { margin-bottom: 4px; }
-.hill218-dev-tools { margin: 2px 0 8px; color: #9faadb; font-size: 11px; }
+.hill218-user-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 8px 0 6px;
+}
+.hill218-dev-tools { margin: 6px 0 8px; color: #9faadb; font-size: 11px; }
 .hill218-dev-tools summary { cursor: pointer; }
 #hill218-body {
-  padding: 12px;
+  padding: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -64,12 +68,8 @@
 #hill218-body::-webkit-scrollbar-track, #hill218-output::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); }
 .hill218-note { color: #aeb8de; margin: 0 0 8px; line-height: 1.45; }
 .hill218-status-line {
-  margin: 4px 0 6px;
-  padding: 5px 7px;
-  border-radius: 8px;
-  background: rgba(84, 214, 146, 0.08);
-  border: 1px solid rgba(84, 214, 146, 0.28);
-  color: #d8ffe7;
+  margin: 4px 0 8px;
+  color: #aeb8de;
   font-size: 11px;
 }
 #hill218-log-input {
@@ -111,6 +111,10 @@
 #hill218-output th span { color: #aeb8de; font-size: 10px; font-weight: 500; }
 .hill218-card-table th:nth-child(2), .hill218-card-table td:nth-child(2) { border-right: 2px solid rgba(126, 155, 255, 0.26); }
 .hill218-card-table th, .hill218-card-table td { font-size: 11px; }
+.hill218-card-table tbody tr:last-child td {
+  border-top: 1px solid rgba(126, 155, 255, 0.32);
+  background: rgba(126, 155, 255, 0.08);
+}
 .hill218-unmapped-row td {
   background: rgba(255, 193, 97, 0.12);
 }
@@ -126,20 +130,28 @@
 #hill218-output li { margin: 4px 0; line-height: 1.45; }
 .hill218-quality-compact {
   margin: 4px 0 8px;
-  padding: 6px 8px;
-  border-radius: 9px;
+  padding: 5px 7px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #dce3ff;
-  font-size: 12px;
+  font-size: 11px;
 }
 .hill218-metrics-details, .hill218-dom-details, .hill218-card-details, .hill218-advice-details, .hill218-scan-details, .hill218-log-details {
   margin: 4px 0 8px;
   color: #c8d1f2;
 }
+.hill218-card-details {
+  margin-top: 0;
+}
 .hill218-metrics-details summary, .hill218-dom-details summary, .hill218-card-details summary, .hill218-advice-details summary, .hill218-scan-details summary, .hill218-log-details summary {
   cursor: pointer;
   padding: 4px 0;
+}
+.hill218-card-details > summary {
+  color: #f7f8ff;
+  font-weight: 700;
+  font-size: 13px;
 }
 .hill218-quality {
   display: grid;

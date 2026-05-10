@@ -11,7 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const model = require('../extension/src/cardModel.js');
 
-const PROJECT = path.resolve(__dirname, '..');
+const PROJECT = '/Users/admin/Dev/VibeCoding-Vault/30_Projects/BGA';
 const OUT_DIR = path.join(PROJECT, 'Evidence', 'Corpus-Runs');
 const PORT = process.env.BGA_CDP_PORT || '9222';
 const HILL218_GAMESTATS_URL = 'https://boardgamearena.com/gamestats?game_id=1110';
@@ -226,10 +226,114 @@ function cardOveruseWarnings(summary) {
   return warnings;
 }
 
+function scoreProbabilityBacktest(events = [], players = []) {
+  const state = {
+    own: { hand: 7, deck: 17, airLeft: 2, used: model.emptyCounts() },
+    opponent: { hand: 7, deck: 17, airLeft: 2, used: model.emptyCounts() },
+  };
+  const rows = [];
+  let skipped = 0;
+  let skippedAirStrike = 0;
+  let skippedUnknown = 0;
+  let skippedImpossible = 0;
+  const chronological = model.normalizeReplayOrder(events);
+  for (const entry of chronological) {
+    const event = model.parseBgaLogLine(entry, {
+      ownNames: players[0] ? [players[0]] : undefined,
+      opponentNames: players[1] ? [players[1]] : undefined,
+    });
+    if (!event) continue;
+    const player = event.player === 'own' || event.player === 'opponent' ? event.player : '';
+    const bucket = player ? state[player] : null;
+    if (!bucket) {
+      if (event.type === 'place' || event.type === 'air_strike') {
+        skipped += 1;
+        skippedUnknown += 1;
+      }
+      continue;
+    }
+    if (event.type === 'return') {
+      bucket.hand = Math.max(0, bucket.hand - event.count);
+      bucket.deck += event.count;
+      continue;
+    }
+    if (event.type === 'draw') {
+      const draw = Math.min(event.count, bucket.deck);
+      bucket.hand += draw;
+      bucket.deck = Math.max(0, bucket.deck - draw);
+      continue;
+    }
+    if (event.type === 'air_strike') {
+      bucket.used.air_strike += 1;
+      bucket.airLeft = Math.max(0, bucket.airLeft - 1);
+      skipped += 1;
+      skippedAirStrike += 1;
+      continue;
+    }
+    if (event.type !== 'place') continue;
+
+    const unitLeft = Object.entries(model.DECK)
+      .filter(([key]) => key !== 'air_strike')
+      .reduce((sum, [key, spec]) => sum + Math.max(0, spec.total - (bucket.used[key] || 0)), 0);
+    const handSize = Math.min(bucket.hand, unitLeft);
+    const remainingCard = Math.max(0, model.DECK[event.card].total - (bucket.used[event.card] || 0));
+    if (!handSize || !unitLeft || !remainingCard) {
+      skipped += 1;
+      skippedImpossible += 1;
+      bucket.used[event.card] += 1;
+      bucket.hand = Math.max(0, bucket.hand - 1);
+      continue;
+    }
+
+    const probabilities = Object.entries(model.DECK)
+      .filter(([key]) => key !== 'air_strike')
+      .map(([key, spec]) => ({
+        card: key,
+        p: model.probabilityAtLeastOne(unitLeft, Math.max(0, spec.total - (bucket.used[key] || 0)), handSize),
+      }))
+      .sort((a, b) => b.p - a.p || a.card.localeCompare(b.card));
+    const actual = probabilities.find((item) => item.card === event.card);
+    const rank = probabilities.findIndex((item) => item.card === event.card) + 1;
+    rows.push({
+      player,
+      card: event.card,
+      probability: actual?.p ?? 0,
+      rank,
+      top1: rank === 1,
+      top2: rank > 0 && rank <= 2,
+      handSize,
+      unitLeft,
+      line: event.line,
+    });
+    bucket.used[event.card] += 1;
+    bucket.hand = Math.max(0, bucket.hand - 1);
+  }
+  const probabilityEvents = rows.length;
+  const avgActualProbability = probabilityEvents
+    ? rows.reduce((sum, row) => sum + row.probability, 0) / probabilityEvents
+    : 0;
+  const top1Hits = rows.filter((row) => row.top1).length;
+  const top2Hits = rows.filter((row) => row.top2).length;
+  return {
+    probabilityEvents,
+    avgActualProbability,
+    top1Hits,
+    top1Rate: probabilityEvents ? top1Hits / probabilityEvents : 0,
+    top2Hits,
+    top2Rate: probabilityEvents ? top2Hits / probabilityEvents : 0,
+    skipped,
+    skippedAirStrike,
+    skippedUnknown,
+    skippedImpossible,
+    rows,
+  };
+}
+
 function analyzeReviewText({ tableId = '', url = '', text = '' } = {}) {
   const markers = pageMarkers(text);
   const players = extractReviewPlayersFromText(text);
   const events = collectReviewLogEventsFromText(text);
+  const probabilityBacktest = scoreProbabilityBacktest(events, players);
   const summary = model.parseBgaLogLines(events, {
     ownNames: players[0] ? [players[0]] : undefined,
     opponentNames: players[1] ? [players[1]] : undefined,
@@ -260,6 +364,7 @@ function analyzeReviewText({ tableId = '', url = '', text = '' } = {}) {
       own: summary.ownUsed,
       opponent: summary.opponentUsed,
     },
+    probabilityBacktest,
     repeatedPlacements,
     blockers,
     ok: blockers.length === 0,
@@ -661,7 +766,13 @@ function writeCorpusReport(results, meta = {}) {
     blocked: results.filter((result) => !result.ok).length,
     deckComplete: results.filter((result) => result.deckComplete).length,
     repeatedPlacementTables: results.filter((result) => result.repeatedPlacements.length).length,
+    probabilityEvents: results.reduce((sum, result) => sum + (result.probabilityBacktest?.probabilityEvents || 0), 0),
+    probabilityTop1Hits: results.reduce((sum, result) => sum + (result.probabilityBacktest?.top1Hits || 0), 0),
+    probabilityTop2Hits: results.reduce((sum, result) => sum + (result.probabilityBacktest?.top2Hits || 0), 0),
+    probabilitySkipped: results.reduce((sum, result) => sum + (result.probabilityBacktest?.skipped || 0), 0),
   };
+  aggregate.probabilityTop1Rate = aggregate.probabilityEvents ? aggregate.probabilityTop1Hits / aggregate.probabilityEvents : 0;
+  aggregate.probabilityTop2Rate = aggregate.probabilityEvents ? aggregate.probabilityTop2Hits / aggregate.probabilityEvents : 0;
   const report = { generatedAt: new Date().toISOString(), meta, aggregate, results };
   fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
   const rows = results.map((result) => [
@@ -673,6 +784,7 @@ function writeCorpusReport(results, meta = {}) {
     `${result.totals.opponent.used}/${result.totals.opponent.left}`,
     result.deckComplete ? 'yes' : 'no',
     String(result.repeatedPlacements.length),
+    result.probabilityBacktest ? `${result.probabilityBacktest.top1Hits}/${result.probabilityBacktest.probabilityEvents}` : '-',
     result.blockers.join('; ') || '-',
   ]);
   fs.writeFileSync(mdPath, [
@@ -683,9 +795,10 @@ function writeCorpusReport(results, meta = {}) {
     `- Blocked: ${aggregate.blocked}`,
     `- Deck complete: ${aggregate.deckComplete}`,
     `- Tables with repeated placements: ${aggregate.repeatedPlacementTables}`,
+    `- Probability backtest: events ${aggregate.probabilityEvents}, top1 ${aggregate.probabilityTop1Hits}/${aggregate.probabilityEvents}, top2 ${aggregate.probabilityTop2Hits}/${aggregate.probabilityEvents}, skipped ${aggregate.probabilitySkipped}`,
     '',
-    '| Status | Table | Players | Parsed | Own used/left | Opp used/left | Deck complete | Repeats | Blockers |',
-    '| --- | --- | --- | ---: | ---: | ---: | --- | ---: | --- |',
+    '| Status | Table | Players | Parsed | Own used/left | Opp used/left | Deck complete | Repeats | Prob top1 | Blockers |',
+    '| --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | --- |',
     ...rows.map((row) => `| ${row.map((cell) => String(cell).replace(/\|/g, '/')).join(' | ')} |`),
     '',
     `JSON: \`${jsonPath}\``,
@@ -1062,6 +1175,7 @@ module.exports = {
   extractReviewPlayersFromText,
   collectReviewLogEventsFromText,
   repeatedPlacementCases,
+  scoreProbabilityBacktest,
   analyzeReviewText,
   blockedTableResult,
   classifyGamereviewPage,

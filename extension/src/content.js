@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-10-full-table-first-v4';
+  const WIDGET_VERSION = '2026-05-10-counter-first-ux-v5';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
@@ -24,30 +24,29 @@
   panel.innerHTML = `
     <header id="hill218-coach-header">
       <strong>Hill 218 Coach</strong>
-      <span class="hill218-subtitle">read-only card counter · build ${WIDGET_VERSION}</span>
+      <span class="hill218-subtitle" title="Read-only helper. It scans only visible BGA page/log text and never plays moves.">read-only counter</span>
       <button id="hill218-minimize" title="Minimize">–</button>
     </header>
     <div id="hill218-body">
-      <p class="hill218-note">Read-only auto-scan: watches visible replay/page changes. No moves, hidden APIs, or network calls.</p>
-      <div id="hill218-scan-status" class="hill218-status-line">Auto-scan starting…</div>
-      <details class="hill218-log-details">
-        <summary>Captured visible log text</summary>
-        <textarea id="hill218-log-input" placeholder="Captured visible log appears here after Scan page."></textarea>
-      </details>
+      <div id="hill218-output"></div>
       <div class="hill218-actions hill218-user-actions">
-        <button id="hill218-scan">Scan page</button>
-        <button id="hill218-copy-status" class="hill218-secondary">Copy status</button>
-        <button id="hill218-clear" class="hill218-secondary">Clear</button>
+        <button id="hill218-scan" title="Rescan visible BGA page, public counters, and game log. Use this after a move or page reload.">Scan</button>
+        <button id="hill218-copy-status" class="hill218-secondary" title="Copy a short beta report for Denis. Send it with a game or replay link if the card count looks wrong.">Copy report</button>
       </div>
+      <div id="hill218-scan-status" class="hill218-status-line" title="Shows when the visible BGA page was last scanned and how many log rows were read.">Auto-scan starting…</div>
       <details class="hill218-dev-tools">
         <summary>Developer tools</summary>
+        <details class="hill218-log-details">
+          <summary>Captured visible log text</summary>
+          <textarea id="hill218-log-input" placeholder="Captured visible log appears here after Scan page."></textarea>
+        </details>
         <div class="hill218-actions">
-          <button id="hill218-parse" class="hill218-secondary">Parse text</button>
-          <button id="hill218-sample" class="hill218-secondary">Sample</button>
-          <button id="hill218-copy-diag" class="hill218-secondary">Copy diagnostics</button>
+          <button id="hill218-clear" class="hill218-secondary" title="Clear only captured text and reset the displayed table. Does not affect BGA. Usually Scan is enough.">Clear captured text</button>
+          <button id="hill218-parse" class="hill218-secondary" title="Developer helper: re-parse the text currently shown in Captured visible log text.">Parse captured text</button>
+          <button id="hill218-sample" class="hill218-secondary" title="Developer helper: load a small sample log for parser testing.">Sample</button>
+          <button id="hill218-copy-diag" class="hill218-secondary" title="Copy detailed DOM/debug diagnostics for troubleshooting selector or counting bugs.">Copy debug diagnostics</button>
         </div>
       </details>
-      <div id="hill218-output"></div>
     </div>
   `;
   document.documentElement.appendChild(panel);
@@ -57,7 +56,7 @@
   const output = panel.querySelector('#hill218-output');
   const input = panel.querySelector('#hill218-log-input');
   const scanStatus = panel.querySelector('#hill218-scan-status');
-  const detailsStateStorageKey = `hill218CoachDetailsState:${location.origin}${location.pathname}${location.search}`;
+  const detailsStateStorageKey = `hill218CoachDetailsState:${WIDGET_VERSION}:${location.origin}${location.pathname}${location.search}`;
   let detailsOpenState = loadDetailsOpenState();
 
   function loadDetailsOpenState() {
@@ -451,19 +450,19 @@
     const unparsedSamples = metrics.unparsedSamples?.length ? `<details><summary>Actionable unparsed samples</summary><ol>${metrics.unparsedSamples.map((line) => `<li>${escapeHtml(line).slice(0, 220)}</li>`).join('')}</ol></details>` : '';
     captureDetailsOpenState(output);
     output.innerHTML = `
-      <div class="hill218-quality-compact ${qualityOk ? 'hill218-quality-ok' : 'hill218-quality-warn'}">
-        Quality: ${qualityOk ? 'OK' : 'Check'} · actions ${actionableRate}% · attribution ${attributionRate}% · player map ${inferred.confidence}%
-      </div>
-      <details class="hill218-card-details">
+      <details class="hill218-card-details" open>
         <summary>Public card counter</summary>
-        <p class="hill218-note"><strong>Your exact visible hand (${cardTable.own.visibleHandTotal})</strong>: ${escapeHtml(exactVisibleHand)}.</p>
-        <p class="hill218-note">Your used / left is corrected from visible hand when your deck is empty; * marks a correction over incomplete live log. ${escapeHtml(opponentHandMode)}</p>
         <table class="hill218-card-table">
           <thead><tr><th>Card</th><th>You<br><span>exact hand</span></th><th>You<br><span>log used / left</span></th><th>Opp<br><span>log used / left</span></th><th>Opp hidden hand<br><span>${cardTable.opponent.hiddenHandTotal} cards total</span></th></tr></thead>
           <tbody>${rows}${totalRow}${unknownLedgerRow}</tbody>
         </table>
+        <p class="hill218-note"><strong>Your visible hand (${cardTable.own.visibleHandTotal})</strong>: ${escapeHtml(exactVisibleHand)}.</p>
+        <p class="hill218-note">Read-only estimate from visible BGA counters/logs. * means your count was corrected from visible hand because the live log is incomplete. ${escapeHtml(opponentHandMode)}</p>
         ${visibleState ? `<details class="hill218-hand-breakdown"><summary>Your exact hand breakdown</summary><table><thead><tr><th>Your exact visible hand</th><th>DOM count</th></tr></thead><tbody>${handRows}</tbody></table></details>` : ''}
       </details>
+      <div class="hill218-quality-compact ${qualityOk ? 'hill218-quality-ok' : 'hill218-quality-warn'}" title="Data quality gate. Detailed diagnostics are lower in Data-quality details.">
+        Quality: ${qualityOk ? 'OK' : 'Check'} · actions ${actionableRate}% · attribution ${attributionRate}% · player map ${inferred.confidence}%
+      </div>
       ${adviceBlock}
       <details class="hill218-scan-details">
         <summary>Read-only scan / visible replay state</summary>
@@ -596,7 +595,9 @@
   });
   panel.querySelector('#hill218-minimize').addEventListener('click', () => {
     body.hidden = !body.hidden;
-    panel.querySelector('#hill218-minimize').textContent = body.hidden ? '+' : '–';
+    const minimize = panel.querySelector('#hill218-minimize');
+    minimize.textContent = body.hidden ? '+' : '–';
+    minimize.title = body.hidden ? 'Expand widget' : 'Collapse widget';
   });
 
   let drag = null;

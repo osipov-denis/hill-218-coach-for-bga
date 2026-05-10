@@ -484,7 +484,42 @@ test('gamereview corpus analysis extracts players actions and repeated placement
   assert.equal(result.perCard.opponent.air_strike, 1);
   assert.equal(result.repeatedPlacements.length, 1);
   assert.equal(result.repeatedPlacements[0].count, 2);
+  assert.equal(result.probabilityBacktest.probabilityEvents, 2);
+  assert.equal(result.probabilityBacktest.skippedAirStrike, 1);
   assert.equal(result.ok, true);
+});
+
+test('gamereview probability backtest scores actual next unit card before play', () => {
+  const events = [
+    { id: 'review-move-1-1', text: 'Denis returned 2 cards to their deck' },
+    { id: 'review-move-2-1', text: 'Opponent returned 2 cards to their deck' },
+    { id: 'review-move-3-1', text: 'Denis placed a Infantry card at 0,0' },
+  ];
+
+  const score = corpus.scoreProbabilityBacktest(events, ['Denis', 'Opponent']);
+
+  assert.equal(score.probabilityEvents, 1);
+  assert.equal(score.top1Hits, 1);
+  assert.equal(score.top2Hits, 1);
+  assert.equal(score.skipped, 0);
+  assert.equal(score.rows[0].card, 'infantry');
+  assert.equal(score.rows[0].handSize, 5);
+  assert.equal(score.rows[0].unitLeft, 24);
+  assert(score.rows[0].probability > 0.8);
+});
+
+test('gamereview probability backtest skips unknown players and air strikes', () => {
+  const events = [
+    { id: 'review-move-1-1', text: 'UnknownHero placed a Infantry card at 0,0' },
+    { id: 'review-move-2-1', text: 'Denis played an Air Strike card destroying the Infantry card at 0,0' },
+  ];
+
+  const score = corpus.scoreProbabilityBacktest(events, ['Denis', 'Opponent']);
+
+  assert.equal(score.probabilityEvents, 0);
+  assert.equal(score.skipped, 2);
+  assert.equal(score.skippedUnknown, 1);
+  assert.equal(score.skippedAirStrike, 1);
 });
 
 test('gamereview corpus args support seed files limits and soft blocked batches', () => {
