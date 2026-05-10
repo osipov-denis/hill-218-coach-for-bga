@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-10-visible-hand-reconcile-v1';
+  const WIDGET_VERSION = '2026-05-10-repeated-live-log-rows-v2';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
@@ -210,9 +210,9 @@
         if (!text) continue;
         const id = node.id || node.dataset?.notifId || node.dataset?.id || '';
         const key = id ? `${label}:${id}` : `${label}:${text}`;
-        if (seen.has(key) || seen.has(text)) continue;
+        if (seen.has(key)) continue;
         seen.add(key);
-        seen.add(text);
+        if (!id) seen.add(text);
         events.push({ id, text, source: label, selector, visible });
       }
     }

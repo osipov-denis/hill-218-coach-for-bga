@@ -227,6 +227,15 @@ test('content labels separate exact own hand, log used-left, and opponent hidden
   assert.match(content, /opponentCandidateProbability/);
 });
 
+test('content collector keeps repeated same-text log rows when BGA ids differ', () => {
+  const contentPath = path.join(__dirname, '../src/content.js');
+  const content = fs.readFileSync(contentPath, 'utf8');
+
+  assert.match(content, /if \(seen\.has\(key\)\) continue/);
+  assert.match(content, /if \(!id\) seen\.add\(text\)/);
+  assert.doesNotMatch(content, /seen\.has\(key\) \|\| seen\.has\(text\)/);
+});
+
 test('buildPlayerCardTable flags exact visible hand mismatch when own deck is empty', () => {
   const table = model.buildPlayerCardTable({
     ownKnownUsed: { ...model.emptyCounts(), infantry: 6, heavy_weapons: 4, special_forces: 2, tank: 2, artillery: 3, paratroopers: 2, air_strike: 2 },
