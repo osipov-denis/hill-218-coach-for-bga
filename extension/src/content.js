@@ -385,7 +385,8 @@
     const rows = Object.entries(cardTable.rows).map(([key, row]) => {
       const ownHandMismatch = row.ownVisibleHand !== row.ownLeftTotal && cardTable.own.counters.deck === 0 && (key !== 'air_strike' || cardTable.own.counters.airStrike === 0);
       const sourceMark = row.ownVerifiedSource === 'parsed-ledger' ? '' : ' *';
-      return `<tr${ownHandMismatch ? ' class="hill218-mismatch-row"' : ''}><td>${row.label}</td><td>${row.ownVisibleHand}</td><td>${row.ownVerifiedUsed} / ${row.ownVerifiedLeft}${sourceMark}</td><td>${row.opponentUsed} / ${row.opponentLeftTotal}</td><td>${percent(row.opponentHandProbability)}</td></tr>`;
+      const opponentHandCell = cardTable.opponent.probabilityOk ? percent(row.opponentHandProbability) : 'blocked';
+      return `<tr${ownHandMismatch ? ' class="hill218-mismatch-row"' : ''}><td>${row.label}</td><td>${row.ownVisibleHand}</td><td>${row.ownVerifiedUsed} / ${row.ownVerifiedLeft}${sourceMark}</td><td>${row.opponentUsed} / ${row.opponentLeftTotal}</td><td>${opponentHandCell}</td></tr>`;
     }).join('');
     const spentLedgerRows = (summary.replayLedger?.rows || []).filter((row) => row.spentThisStep > 0);
     const latestSpentStep = spentLedgerRows.at(-1)?.step || 0;
@@ -424,9 +425,6 @@
     const reconciliationWarnings = [
       ...(cardTable.own.reconciliation?.warnings || []),
       ...(cardTable.opponent.reconciliation?.warnings || []),
-      ...(cardTable.opponent.possibleLeftTotal > cardTable.opponent.publicUnknownPool
-        ? [`opponent possible cards ${cardTable.opponent.possibleLeftTotal} exceed public hidden pool ${cardTable.opponent.publicUnknownPool}; visible live log is incomplete`]
-        : []),
     ];
     const parseRate = metrics.logEventsRead ? Math.round((metrics.logEventsParsed / metrics.logEventsRead) * 100) : 0;
     const actionableRate = Math.round(Number(metrics.actionableCoverage ?? 0) * 100);
@@ -435,7 +433,7 @@
     const qualityOk = metrics.logEventsRead > 0 && actionableRate >= 90 && attributionRate >= 95 && inferred.confidence >= 85 && unknownCardEvents === 0 && reconciliationWarnings.length === 0;
     const topOpponentRisks = Object.entries(cardTable.rows)
       .map(([key, row]) => ({ key, label: row.label, probability: row.opponentHandProbability, left: row.opponentLeftTotal }))
-      .filter((row) => row.left > 0 && row.probability > 0)
+      .filter((row) => cardTable.opponent.probabilityOk && row.left > 0 && row.probability > 0)
       .sort((a, b) => b.probability - a.probability)
       .slice(0, 3);
     const adviceItems = qualityOk ? [

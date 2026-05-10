@@ -690,6 +690,12 @@
         opponentHandProbability: opponentProbabilities.rows[key].probabilityAtLeastOne,
       };
     }
+    const opponentPossibleLeftTotal = Object.entries(rows)
+      .filter(([key]) => key !== 'air_strike')
+      .reduce((sum, [, row]) => sum + row.opponentLeftTotal, 0);
+    const opponentProbabilityWarnings = opponentPossibleLeftTotal > opponentProbabilities.unknownPoolSize
+      ? [`opponent possible cards ${opponentPossibleLeftTotal} exceed public hidden pool ${opponentProbabilities.unknownPoolSize}; visible live log is incomplete`]
+      : [];
     return {
       rows,
       own: {
@@ -722,8 +728,14 @@
         hiddenHandTotal: opponentProbabilities.handSize,
         hiddenHandLabel: `Opponent hidden hand: ${opponentProbabilities.handSize} card${opponentProbabilities.handSize === 1 ? '' : 's'}`,
         probabilityPoolLabel: `probabilities over ${opponentProbabilities.unknownPoolSize} unseen unit cards`,
-        possibleLeftTotal: Object.values(rows).reduce((sum, row) => sum + row.opponentLeftTotal, 0),
-        reconciliation: opponentReconciliation,
+        possibleLeftTotal: opponentPossibleLeftTotal,
+        probabilityOk: opponentProbabilityWarnings.length === 0,
+        probabilityWarnings: opponentProbabilityWarnings,
+        reconciliation: {
+          ...opponentReconciliation,
+          ok: opponentReconciliation.ok && opponentProbabilityWarnings.length === 0,
+          warnings: [...opponentReconciliation.warnings, ...opponentProbabilityWarnings],
+        },
       },
     };
   }

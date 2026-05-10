@@ -169,14 +169,33 @@ test('buildPlayerCardTable keeps exact visible own hand separate from log-derive
 
 test('opponent hidden hand total label follows public hand counter, not probability pool size', () => {
   const table = model.buildPlayerCardTable({
-    opponentKnownUsed: { ...model.emptyCounts(), infantry: 1 },
+    opponentKnownUsed: {
+      ...model.emptyCounts(),
+      infantry: 7,
+      heavy_weapons: 4,
+      special_forces: 4,
+      tank: 3,
+    },
     opponentCounters: { deck: 4, hand: 3, airStrike: 0, unitsInPlay: 5, unitsDestroyed: 14 },
   });
 
   assert.equal(table.opponent.hiddenHandTotal, 3);
   assert.equal(table.opponent.hiddenHandLabel, 'Opponent hidden hand: 3 cards');
   assert.equal(table.opponent.publicUnknownPool, 7);
+  assert.equal(table.opponent.probabilityOk, true);
   assert.match(table.opponent.probabilityPoolLabel, /7 unseen unit cards/);
+});
+
+test('opponent probabilities block when log-derived possible cards exceed public hidden pool', () => {
+  const table = model.buildPlayerCardTable({
+    opponentKnownUsed: { ...model.emptyCounts(), infantry: 5, special_forces: 1, heavy_weapons: 5, tank: 3, artillery: 3, paratroopers: 3, air_strike: 2 },
+    opponentCounters: { deck: 0, hand: 3, airStrike: 0 },
+  });
+
+  assert.equal(table.opponent.publicUnknownPool, 3);
+  assert.equal(table.opponent.possibleLeftTotal, 4);
+  assert.equal(table.opponent.probabilityOk, false);
+  assert.match(table.opponent.probabilityWarnings.join('\n'), /possible cards 4 exceed public hidden pool 3/);
 });
 
 test('own reconciliation blocks when exact visible hand disagrees with parsed and public counters', () => {
@@ -199,6 +218,8 @@ test('content labels separate exact own hand, log used-left, and opponent hidden
   assert.match(content, /log used \/ left/);
   assert.match(content, /Opp hidden hand/);
   assert.match(content, /hiddenHandTotal/);
+  assert.match(content, /probabilityOk/);
+  assert.match(content, /blocked/);
 });
 
 test('buildPlayerCardTable flags exact visible hand mismatch when own deck is empty', () => {
