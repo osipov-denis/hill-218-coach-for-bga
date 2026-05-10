@@ -488,6 +488,44 @@
     };
   }
 
+  function reconcileVisibleHandWithKnownUsed(visibleHand = emptyCounts(), knownUsed = emptyCounts(), counters = {}, role = 'you') {
+    const normalized = normalizeCounters(counters);
+    const visibleHandTotal = sumCounts(visibleHand);
+    const visibleUnitHandTotal = Object.entries(visibleHand)
+      .filter(([key]) => key !== 'air_strike')
+      .reduce((sum, [, value]) => sum + clampCount(value), 0);
+    const visibleAirStrikeTotal = clampCount(visibleHand.air_strike);
+    const warnings = [];
+    const hasVisibleHandData = visibleHandTotal > 0;
+
+    if (hasVisibleHandData) {
+      for (const [key, spec] of Object.entries(DECK)) {
+        const visible = clampCount(visibleHand[key]);
+        const used = clampCount(knownUsed[key]);
+        if (visible + used > spec.total) {
+          warnings.push(`${role} visible hand conflict: ${spec.label} visible ${visible} plus parsed used ${used} exceeds deck total ${spec.total}`);
+        }
+      }
+    }
+
+    if (hasVisibleHandData && Object.prototype.hasOwnProperty.call(counters || {}, 'hand') && visibleUnitHandTotal !== normalized.hand) {
+      warnings.push(`${role} visible unit hand mismatch: DOM shows ${visibleUnitHandTotal}, public hand counter shows ${normalized.hand}`);
+    }
+    if (hasVisibleHandData && (Object.prototype.hasOwnProperty.call(counters || {}, 'airStrike') || Object.prototype.hasOwnProperty.call(counters || {}, 'air-strike'))
+      && visibleAirStrikeTotal !== normalized.airStrike) {
+      warnings.push(`${role} visible Air Strike mismatch: DOM shows ${visibleAirStrikeTotal}, public Air Strike counter shows ${normalized.airStrike}`);
+    }
+
+    return {
+      role,
+      visibleHandTotal,
+      visibleUnitHandTotal,
+      visibleAirStrikeTotal,
+      ok: warnings.length === 0,
+      warnings,
+    };
+  }
+
   function estimateOpponentHandProbabilities({ opponentKnownUsed = emptyCounts(), opponentCounters = {} } = {}) {
     const counters = normalizeCounters(opponentCounters);
     const unitDeckTotal = Object.entries(DECK)
@@ -603,19 +641,49 @@
     const ownCounter = normalizeCounters(ownCounters);
     const opponentCounter = normalizeCounters(opponentCounters);
     const opponentProbabilities = estimateOpponentHandProbabilities({ opponentKnownUsed, opponentCounters: opponentCounter });
+    const ownVisibleHandTotal = sumCounts(ownVisibleHand);
+    const ownVisibleUnitHandTotal = Object.entries(ownVisibleHand)
+      .filter(([key]) => key !== 'air_strike')
+      .reduce((sum, [, value]) => sum + clampCount(value), 0);
+    const ownVisibleAirStrikeTotal = clampCount(ownVisibleHand.air_strike);
+    const ownVisibleLabels = Object.entries(DECK)
+      .flatMap(([key, spec]) => Array.from({ length: clampCount(ownVisibleHand[key]) }, () => spec.label));
+    const ownKnownReconciliation = reconcileKnownUsedWithCounters(ownKnownUsed, ownCounters, 'you');
+    const ownVisibleReconciliation = reconcileVisibleHandWithKnownUsed(ownVisibleHand, ownKnownUsed, ownCounters, 'you');
+    const opponentReconciliation = reconcileKnownUsedWithCounters(opponentKnownUsed, opponentCounters, 'opponent');
     const rows = {};
+    const ownVisibleHandWarnings = [];
     for (const [key, spec] of Object.entries(DECK)) {
       const ownUsed = clampCount(ownKnownUsed[key]);
       const opponentUsed = clampCount(opponentKnownUsed[key]);
       const ownVisible = clampCount(ownVisibleHand[key]);
       const ownLeftTotal = Math.max(0, spec.total - ownUsed);
       const opponentLeftTotal = Math.max(0, spec.total - opponentUsed);
+      const hasOwnAirCounter = Object.prototype.hasOwnProperty.call(ownCounters || {}, 'airStrike')
+        || Object.prototype.hasOwnProperty.call(ownCounters || {}, 'air-strike');
+      const ownVerifiedLeft = key === 'air_strike'
+        ? (hasOwnAirCounter ? ownCounter.airStrike : ownLeftTotal)
+        : (ownCounter.deck === 0 ? ownVisible : ownLeftTotal);
+      const ownVerifiedUsed = Math.max(0, spec.total - ownVerifiedLeft);
+      const ownVerifiedSource = ownVerifiedLeft === ownLeftTotal
+        ? 'parsed-ledger'
+        : (key === 'air_strike' ? 'public-air-strike-counter' : 'visible-hand-dom-with-empty-deck');
+      if (key !== 'air_strike' && ownCounter.deck === 0 && ownLeftTotal !== ownVisible) {
+        ownVisibleHandWarnings.push(`${spec.label}: visible hand ${ownVisible}, parsed left ${ownLeftTotal}`);
+      }
+      if (key === 'air_strike' && ownCounter.airStrike === 0 && ownLeftTotal !== ownVisible) {
+        ownVisibleHandWarnings.push(`${spec.label}: visible hand ${ownVisible}, parsed left ${ownLeftTotal}`);
+      }
       rows[key] = {
         label: spec.label,
         total: spec.total,
         ownUsed,
+        ownVisibleExact: ownVisible,
         ownVisibleHand: ownVisible,
         ownLeftTotal,
+        ownVerifiedUsed,
+        ownVerifiedLeft,
+        ownVerifiedSource,
         ownUnknownLeft: Math.max(0, ownLeftTotal - ownVisible),
         opponentUsed,
         opponentLeftTotal,
@@ -626,22 +694,41 @@
       rows,
       own: {
         counters: ownCounter,
-        visibleHandTotal: sumCounts(ownVisibleHand),
+        visibleHandCounts: { ...emptyCounts(), ...ownVisibleHand },
+        visibleHandLabels: ownVisibleLabels,
+        visibleHandTotal: ownVisibleHandTotal,
+        visibleUnitHandTotal: ownVisibleUnitHandTotal,
+        visibleAirStrikeTotal: ownVisibleAirStrikeTotal,
         knownUsedTotal: sumCounts(ownKnownUsed),
         publicUnknownPool: ownCounter.deck + ownCounter.hand,
-        reconciliation: reconcileKnownUsedWithCounters(ownKnownUsed, ownCounters, 'you'),
+        visibleHandWarnings: ownVisibleHandWarnings,
+        visibleHandOk: ownVisibleHandWarnings.length === 0 && ownVisibleReconciliation.ok,
+        reconciliation: {
+          role: 'you',
+          knownUsedTotal: ownKnownReconciliation.knownUsedTotal,
+          publicUsage: ownKnownReconciliation.publicUsage,
+          visibleHandTotal: ownVisibleReconciliation.visibleHandTotal,
+          visibleUnitHandTotal: ownVisibleReconciliation.visibleUnitHandTotal,
+          visibleAirStrikeTotal: ownVisibleReconciliation.visibleAirStrikeTotal,
+          ok: ownKnownReconciliation.ok && ownVisibleReconciliation.ok,
+          warnings: [...ownKnownReconciliation.warnings, ...ownVisibleReconciliation.warnings, ...ownVisibleHandWarnings],
+        },
       },
       opponent: {
         counters: opponentCounter,
         knownUsedTotal: sumCounts(opponentKnownUsed),
         publicUnknownPool: opponentProbabilities.unknownPoolSize,
         handSize: opponentProbabilities.handSize,
-        reconciliation: reconcileKnownUsedWithCounters(opponentKnownUsed, opponentCounters, 'opponent'),
+        hiddenHandTotal: opponentProbabilities.handSize,
+        hiddenHandLabel: `Opponent hidden hand: ${opponentProbabilities.handSize} card${opponentProbabilities.handSize === 1 ? '' : 's'}`,
+        probabilityPoolLabel: `probabilities over ${opponentProbabilities.unknownPoolSize} unseen unit cards`,
+        possibleLeftTotal: Object.values(rows).reduce((sum, row) => sum + row.opponentLeftTotal, 0),
+        reconciliation: opponentReconciliation,
       },
     };
   }
 
-  const api = { DECK, emptyCounts, typeKeyToCard, detectCard, detectPlayer, parseLog, parseBgaLogLine, parseBgaLogLines, normalizeLogInput, canonicalLogKey, extractReplayOrder, normalizeReplayOrder, remainingFor, buildReplayLedgerTrace, buildHints, isIgnorableLogLine, probabilityAtLeastOne, publicUsageFromCounters, reconcileKnownUsedWithCounters, estimateOpponentHandProbabilities, inferPlayerMapping, buildPlayerCardTable };
+  const api = { DECK, emptyCounts, typeKeyToCard, detectCard, detectPlayer, parseLog, parseBgaLogLine, parseBgaLogLines, normalizeLogInput, canonicalLogKey, extractReplayOrder, normalizeReplayOrder, remainingFor, buildReplayLedgerTrace, buildHints, isIgnorableLogLine, probabilityAtLeastOne, publicUsageFromCounters, reconcileKnownUsedWithCounters, reconcileVisibleHandWithKnownUsed, estimateOpponentHandProbabilities, inferPlayerMapping, buildPlayerCardTable };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   global.Hill218CardModel = api;
 })(typeof window !== 'undefined' ? window : globalThis);

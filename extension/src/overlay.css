@@ -114,6 +114,9 @@
 .hill218-unmapped-row td {
   background: rgba(255, 193, 97, 0.12);
 }
+.hill218-mismatch-row td {
+  background: rgba(255, 102, 102, 0.14);
+}
 .hill218-unmapped-row span {
   color: #ffd7a3;
   font-size: 11px;

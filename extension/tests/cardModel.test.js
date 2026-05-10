@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const model = require('../src/cardModel.js');
 const corpus = require('../../scripts/bga_gamereview_corpus.js');
 
@@ -128,7 +130,7 @@ test('buildPlayerCardTable combines used cards, visible hand and counters', () =
     ownKnownUsed: { ...model.emptyCounts(), infantry: 1 },
     opponentKnownUsed: { ...model.emptyCounts(), artillery: 1 },
     ownVisibleHand: { ...model.emptyCounts(), tank: 1, air_strike: 2 },
-    ownCounters: { deck: 11, hand: 3 },
+    ownCounters: { deck: 11, hand: 1, airStrike: 2 },
     opponentCounters: { deck: 10, hand: 6 },
   });
 
@@ -136,10 +138,88 @@ test('buildPlayerCardTable combines used cards, visible hand and counters', () =
   assert.equal(table.rows.infantry.ownLeftTotal, 6);
   assert.equal(table.rows.tank.ownVisibleHand, 1);
   assert.equal(table.rows.air_strike.ownVisibleHand, 2);
-  assert.equal(table.own.publicUnknownPool, 14);
+  assert.equal(table.own.publicUnknownPool, 12);
+  assert.equal(table.own.visibleHandOk, true);
   assert.equal(table.opponent.publicUnknownPool, 16);
   assert.equal(table.rows.artillery.opponentUsed, 1);
   assert.equal(table.rows.artillery.opponentHandProbability, 0.625);
+});
+
+test('buildPlayerCardTable keeps exact visible own hand separate from log-derived left', () => {
+  const table = model.buildPlayerCardTable({
+    ownKnownUsed: { ...model.emptyCounts(), infantry: 2, tank: 1 },
+    ownVisibleHand: {
+      ...model.emptyCounts(),
+      infantry: 1,
+      special_forces: 1,
+      tank: 1,
+      paratroopers: 1,
+    },
+    ownCounters: { deck: 18, hand: 4, airStrike: 0, unitsInPlay: 3, unitsDestroyed: 0 },
+  });
+
+  assert.equal(table.own.visibleHandTotal, 4);
+  assert.equal(table.own.visibleUnitHandTotal, 4);
+  assert.equal(table.own.visibleAirStrikeTotal, 0);
+  assert.deepEqual(table.own.visibleHandLabels, ['Infantry', 'Special Forces', 'Tank', 'Paratroopers']);
+  assert.equal(table.rows.infantry.ownVisibleExact, 1);
+  assert.equal(table.rows.infantry.ownLeftTotal, 5);
+  assert.equal(table.rows.infantry.ownUnknownLeft, 4);
+});
+
+test('opponent hidden hand total label follows public hand counter, not probability pool size', () => {
+  const table = model.buildPlayerCardTable({
+    opponentKnownUsed: { ...model.emptyCounts(), infantry: 1 },
+    opponentCounters: { deck: 4, hand: 3, airStrike: 0, unitsInPlay: 5, unitsDestroyed: 14 },
+  });
+
+  assert.equal(table.opponent.hiddenHandTotal, 3);
+  assert.equal(table.opponent.hiddenHandLabel, 'Opponent hidden hand: 3 cards');
+  assert.equal(table.opponent.publicUnknownPool, 7);
+  assert.match(table.opponent.probabilityPoolLabel, /7 unseen unit cards/);
+});
+
+test('own reconciliation blocks when exact visible hand disagrees with parsed and public counters', () => {
+  const table = model.buildPlayerCardTable({
+    ownKnownUsed: { ...model.emptyCounts(), infantry: 7 },
+    ownVisibleHand: { ...model.emptyCounts(), infantry: 1, tank: 1 },
+    ownCounters: { deck: 11, hand: 4, airStrike: 1, unitsInPlay: 6, unitsDestroyed: 1 },
+  });
+
+  assert.equal(table.own.reconciliation.ok, false);
+  assert.match(table.own.reconciliation.warnings.join('\n'), /Infantry visible 1 plus parsed used 7 exceeds deck total 7/);
+  assert.match(table.own.reconciliation.warnings.join('\n'), /DOM shows 2, public hand counter shows 4/);
+});
+
+test('content labels separate exact own hand, log used-left, and opponent hidden-hand total', () => {
+  const contentPath = path.join(__dirname, '../src/content.js');
+  const content = fs.readFileSync(contentPath, 'utf8');
+
+  assert.match(content, /Your exact visible hand/);
+  assert.match(content, /log used \/ left/);
+  assert.match(content, /Opp hidden hand/);
+  assert.match(content, /hiddenHandTotal/);
+});
+
+test('buildPlayerCardTable flags exact visible hand mismatch when own deck is empty', () => {
+  const table = model.buildPlayerCardTable({
+    ownKnownUsed: { ...model.emptyCounts(), infantry: 6, heavy_weapons: 4, special_forces: 2, tank: 2, artillery: 3, paratroopers: 2, air_strike: 2 },
+    ownVisibleHand: { ...model.emptyCounts(), infantry: 1, special_forces: 1, tank: 1, paratroopers: 1 },
+    ownCounters: { deck: 0, hand: 4, airStrike: 0 },
+  });
+
+  assert.equal(table.own.visibleHandTotal, 4);
+  assert.equal(table.own.visibleHandOk, false);
+  assert(table.own.visibleHandWarnings.some((warning) => warning.includes('Heavy Weapons: visible hand 0, parsed left 1')));
+  assert.equal(table.rows.heavy_weapons.ownLeftTotal, 1);
+  assert.equal(table.rows.heavy_weapons.ownVisibleHand, 0);
+  assert.equal(table.rows.heavy_weapons.ownVerifiedLeft, 0);
+  assert.equal(table.rows.heavy_weapons.ownVerifiedUsed, 5);
+  assert.equal(table.rows.heavy_weapons.ownVerifiedSource, 'visible-hand-dom-with-empty-deck');
+  assert.equal(table.rows.infantry.ownLeftTotal, 1);
+  assert.equal(table.rows.infantry.ownVisibleHand, 1);
+  assert.equal(table.rows.infantry.ownVerifiedLeft, 1);
+  assert.equal(table.rows.infantry.ownVerifiedUsed, 6);
 });
 
 test('parseBgaLogLines normalizes real BGA placed air-strike draw return and attack lines', () => {

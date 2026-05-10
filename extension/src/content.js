@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-08-review-log-reconcile-v1';
+  const WIDGET_VERSION = '2026-05-10-visible-hand-reconcile-v1';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
@@ -382,8 +382,10 @@
       ownCounters: inferred.ownCounters,
       opponentCounters: inferred.opponentCounters,
     });
-    const rows = Object.entries(cardTable.rows).map(([, row]) => {
-      return `<tr><td>${row.label}</td><td>${row.ownUsed} / ${row.ownLeftTotal}</td><td>${row.opponentUsed} / ${row.opponentLeftTotal}</td><td>${percent(row.opponentHandProbability)}</td></tr>`;
+    const rows = Object.entries(cardTable.rows).map(([key, row]) => {
+      const ownHandMismatch = row.ownVisibleHand !== row.ownLeftTotal && cardTable.own.counters.deck === 0 && (key !== 'air_strike' || cardTable.own.counters.airStrike === 0);
+      const sourceMark = row.ownVerifiedSource === 'parsed-ledger' ? '' : ' *';
+      return `<tr${ownHandMismatch ? ' class="hill218-mismatch-row"' : ''}><td>${row.label}</td><td>${row.ownVisibleHand}</td><td>${row.ownVerifiedUsed} / ${row.ownVerifiedLeft}${sourceMark}</td><td>${row.opponentUsed} / ${row.opponentLeftTotal}</td><td>${percent(row.opponentHandProbability)}</td></tr>`;
     }).join('');
     const spentLedgerRows = (summary.replayLedger?.rows || []).filter((row) => row.spentThisStep > 0);
     const latestSpentStep = spentLedgerRows.at(-1)?.step || 0;
@@ -395,13 +397,18 @@
     if (replayMoveNumber) totalLabelParts.push(`move ${replayMoveNumber}`);
     if (latestSpentStep && latestSpentStep !== replayMoveNumber) totalLabelParts.push(`parsed ${latestSpentStep}`);
     else if (latestSpentStep && !replayMoveNumber) totalLabelParts.push(`step ${latestSpentStep}`);
-    const totalRow = `<tr><td><strong>Total${totalLabelParts.length ? ` (${totalLabelParts.join('; ')})` : ''}</strong></td><td><strong>${ownLedgerTotal.used} / ${ownLedgerTotal.left}</strong></td><td><strong>${opponentLedgerTotal.used} / ${opponentLedgerTotal.left}</strong></td><td>—</td></tr>`;
+    const ownVerifiedLeftTotal = Object.values(cardTable.rows).reduce((sum, row) => sum + row.ownVerifiedLeft, 0);
+    const ownVerifiedUsedTotal = Object.values(cardTable.rows).reduce((sum, row) => sum + row.ownVerifiedUsed, 0);
+    const totalRow = `<tr><td><strong>Total${totalLabelParts.length ? ` (${totalLabelParts.join('; ')})` : ''}</strong></td><td><strong>${cardTable.own.visibleHandTotal}</strong></td><td><strong>${ownVerifiedUsedTotal} / ${ownVerifiedLeftTotal}</strong></td><td><strong>${opponentLedgerTotal.used} / ${opponentLedgerTotal.left}</strong></td><td>—</td></tr>`;
     const unknownLedgerRow = unknownLedgerTotal.used > 0
-      ? `<tr class="hill218-unmapped-row"><td><strong>Unmapped parsed events</strong></td><td colspan="2"><strong>${unknownLedgerTotal.used} / ${unknownLedgerTotal.left}</strong><br><span>blocked until player mapping passes</span></td><td>—</td></tr>`
+      ? `<tr class="hill218-unmapped-row"><td><strong>Unmapped parsed events</strong></td><td>—</td><td colspan="2"><strong>${unknownLedgerTotal.used} / ${unknownLedgerTotal.left}</strong><br><span>blocked until player mapping passes</span></td><td>—</td></tr>`
       : '';
     const handRows = visibleState ? Object.entries(model.DECK).map(([key, spec]) => {
       return `<tr><td>${spec.label}</td><td>${visibleState.ownHand[key]}</td></tr>`;
     }).join('') : '';
+    const exactVisibleHand = cardTable.own.visibleHandLabels.length
+      ? cardTable.own.visibleHandLabels.join(', ')
+      : 'none detected';
     const counterRows = visibleState ? Object.entries(visibleState.counters).map(([playerId, values]) => {
       const role = playerId === inferred.ownPlayerId ? 'you?' : (playerId === inferred.opponentPlayerId ? 'opponent?' : 'unknown');
       return `<tr><td>${escapeHtml(playerId)}</td><td>${escapeHtml(values.name || '')}</td><td>${escapeHtml(role)}</td><td>${values.deck ?? ''}</td><td>${values.hand ?? ''}</td><td>${values['air-strike'] ?? ''}</td><td>${values['units-in-play'] ?? ''}</td><td>${values['units-destroyed'] ?? ''}</td></tr>`;
@@ -417,6 +424,9 @@
     const reconciliationWarnings = [
       ...(cardTable.own.reconciliation?.warnings || []),
       ...(cardTable.opponent.reconciliation?.warnings || []),
+      ...(cardTable.opponent.possibleLeftTotal > cardTable.opponent.publicUnknownPool
+        ? [`opponent possible cards ${cardTable.opponent.possibleLeftTotal} exceed public hidden pool ${cardTable.opponent.publicUnknownPool}; visible live log is incomplete`]
+        : []),
     ];
     const parseRate = metrics.logEventsRead ? Math.round((metrics.logEventsParsed / metrics.logEventsRead) * 100) : 0;
     const actionableRate = Math.round(Number(metrics.actionableCoverage ?? 0) * 100);
@@ -443,9 +453,11 @@
       </div>
       <details class="hill218-card-details">
         <summary>Public card counter</summary>
-        <p class="hill218-note">Each player column shows used / left. Total row uses the BGA replay move when available and shows parsed ledger progress separately.</p>
+        <p class="hill218-note"><strong>Your exact visible hand (${cardTable.own.visibleHandTotal})</strong>: ${escapeHtml(exactVisibleHand)}.</p>
+        ${visibleState ? `<table><thead><tr><th>Your exact visible hand</th><th>DOM count</th></tr></thead><tbody>${handRows}</tbody></table>` : ''}
+        <p class="hill218-note">Your used / left is corrected from visible hand when your deck is empty; * marks a correction over incomplete live log. Opponent hand is probability only, using ${escapeHtml(cardTable.opponent.hiddenHandLabel)} and ${escapeHtml(cardTable.opponent.probabilityPoolLabel)}.</p>
         <table class="hill218-card-table">
-          <thead><tr><th>Card</th><th>You<br><span>used / left</span></th><th>Opp<br><span>used / left</span></th><th>Opp hand</th></tr></thead>
+          <thead><tr><th>Card</th><th>You<br><span>exact hand</span></th><th>You<br><span>log used / left</span></th><th>Opp<br><span>log used / left</span></th><th>Opp hidden hand<br><span>${cardTable.opponent.hiddenHandTotal} cards total</span></th></tr></thead>
           <tbody>${rows}${totalRow}${unknownLedgerRow}</tbody>
         </table>
       </details>
@@ -455,7 +467,7 @@
         <p class="hill218-note">Parsed card/action events: ${summary.events.length}. Unknown-player card events: ${unknownCardEvents}.</p>
         ${visibleState ? `
           <p class="hill218-note">Hand cards: ${visibleState.handCards.length}; battlefield positions: ${visibleState.battlefieldPositions}; battlefield cards: ${visibleState.battlefieldCards}; container: ${escapeHtml(visibleState.gameContainerClass || 'unknown')}.</p>
-          <p class="hill218-note">Public pools — you: deck ${cardTable.own.counters.deck}, hand ${cardTable.own.counters.hand}, pool ${cardTable.own.publicUnknownPool}; opponent: deck ${cardTable.opponent.counters.deck}, hand ${cardTable.opponent.counters.hand}, pool ${cardTable.opponent.publicUnknownPool}.</p>
+          <p class="hill218-note">Public pools — you: deck ${cardTable.own.counters.deck}, hand ${cardTable.own.counters.hand}, visible hand ${cardTable.own.visibleHandTotal}; opponent: deck ${cardTable.opponent.counters.deck}, hidden hand ${cardTable.opponent.counters.hand}, probability pool ${cardTable.opponent.publicUnknownPool}, possible-by-log ${cardTable.opponent.possibleLeftTotal}.</p>
         ` : ''}
       </details>
       <details class="hill218-metrics-details">
