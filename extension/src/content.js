@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-10-repeated-live-log-rows-v3';
+  const WIDGET_VERSION = '2026-05-10-full-table-first-v4';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
@@ -457,12 +457,12 @@
       <details class="hill218-card-details">
         <summary>Public card counter</summary>
         <p class="hill218-note"><strong>Your exact visible hand (${cardTable.own.visibleHandTotal})</strong>: ${escapeHtml(exactVisibleHand)}.</p>
-        ${visibleState ? `<table><thead><tr><th>Your exact visible hand</th><th>DOM count</th></tr></thead><tbody>${handRows}</tbody></table>` : ''}
         <p class="hill218-note">Your used / left is corrected from visible hand when your deck is empty; * marks a correction over incomplete live log. ${escapeHtml(opponentHandMode)}</p>
         <table class="hill218-card-table">
           <thead><tr><th>Card</th><th>You<br><span>exact hand</span></th><th>You<br><span>log used / left</span></th><th>Opp<br><span>log used / left</span></th><th>Opp hidden hand<br><span>${cardTable.opponent.hiddenHandTotal} cards total</span></th></tr></thead>
           <tbody>${rows}${totalRow}${unknownLedgerRow}</tbody>
         </table>
+        ${visibleState ? `<details class="hill218-hand-breakdown"><summary>Your exact hand breakdown</summary><table><thead><tr><th>Your exact visible hand</th><th>DOM count</th></tr></thead><tbody>${handRows}</tbody></table></details>` : ''}
       </details>
       ${adviceBlock}
       <details class="hill218-scan-details">
