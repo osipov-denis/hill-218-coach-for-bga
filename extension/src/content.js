@@ -385,7 +385,9 @@
     const rows = Object.entries(cardTable.rows).map(([key, row]) => {
       const ownHandMismatch = row.ownVisibleHand !== row.ownLeftTotal && cardTable.own.counters.deck === 0 && (key !== 'air_strike' || cardTable.own.counters.airStrike === 0);
       const sourceMark = row.ownVerifiedSource === 'parsed-ledger' ? '' : ' *';
-      const opponentHandCell = cardTable.opponent.probabilityOk ? percent(row.opponentHandProbability) : 'blocked';
+      const opponentHandCell = cardTable.opponent.probabilityOk
+        ? percent(row.opponentHandProbability)
+        : `~${percent(row.opponentCandidateProbability)}`;
       return `<tr${ownHandMismatch ? ' class="hill218-mismatch-row"' : ''}><td>${row.label}</td><td>${row.ownVisibleHand}</td><td>${row.ownVerifiedUsed} / ${row.ownVerifiedLeft}${sourceMark}</td><td>${row.opponentUsed} / ${row.opponentLeftTotal}</td><td>${opponentHandCell}</td></tr>`;
     }).join('');
     const spentLedgerRows = (summary.replayLedger?.rows || []).filter((row) => row.spentThisStep > 0);
@@ -410,6 +412,9 @@
     const exactVisibleHand = cardTable.own.visibleHandLabels.length
       ? cardTable.own.visibleHandLabels.join(', ')
       : 'none detected';
+    const opponentHandMode = cardTable.opponent.probabilityOk
+      ? `Opponent hand uses ${cardTable.opponent.hiddenHandLabel} and ${cardTable.opponent.probabilityPoolLabel}.`
+      : `Opponent hand is an uncertain candidate estimate: public hidden hand ${cardTable.opponent.hiddenHandTotal}, log-derived candidates ${cardTable.opponent.possibleLeftTotal}, delta ${cardTable.opponent.candidateMissing}. ~% means the visible live log is incomplete, not that the row is exact.`;
     const counterRows = visibleState ? Object.entries(visibleState.counters).map(([playerId, values]) => {
       const role = playerId === inferred.ownPlayerId ? 'you?' : (playerId === inferred.opponentPlayerId ? 'opponent?' : 'unknown');
       return `<tr><td>${escapeHtml(playerId)}</td><td>${escapeHtml(values.name || '')}</td><td>${escapeHtml(role)}</td><td>${values.deck ?? ''}</td><td>${values.hand ?? ''}</td><td>${values['air-strike'] ?? ''}</td><td>${values['units-in-play'] ?? ''}</td><td>${values['units-destroyed'] ?? ''}</td></tr>`;
@@ -453,7 +458,7 @@
         <summary>Public card counter</summary>
         <p class="hill218-note"><strong>Your exact visible hand (${cardTable.own.visibleHandTotal})</strong>: ${escapeHtml(exactVisibleHand)}.</p>
         ${visibleState ? `<table><thead><tr><th>Your exact visible hand</th><th>DOM count</th></tr></thead><tbody>${handRows}</tbody></table>` : ''}
-        <p class="hill218-note">Your used / left is corrected from visible hand when your deck is empty; * marks a correction over incomplete live log. Opponent hand is probability only, using ${escapeHtml(cardTable.opponent.hiddenHandLabel)} and ${escapeHtml(cardTable.opponent.probabilityPoolLabel)}.</p>
+        <p class="hill218-note">Your used / left is corrected from visible hand when your deck is empty; * marks a correction over incomplete live log. ${escapeHtml(opponentHandMode)}</p>
         <table class="hill218-card-table">
           <thead><tr><th>Card</th><th>You<br><span>exact hand</span></th><th>You<br><span>log used / left</span></th><th>Opp<br><span>log used / left</span></th><th>Opp hidden hand<br><span>${cardTable.opponent.hiddenHandTotal} cards total</span></th></tr></thead>
           <tbody>${rows}${totalRow}${unknownLedgerRow}</tbody>

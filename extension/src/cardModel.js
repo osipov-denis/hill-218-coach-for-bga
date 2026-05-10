@@ -449,25 +449,24 @@
       .some((key) => Object.prototype.hasOwnProperty.call(counters || {}, key));
     if (!hasPoolCounters && !hasUnitCounters) return null;
 
-    const unitUsed = normalized.unitsInPlay + normalized.unitsDestroyed;
+    const battlefieldUnitActivity = normalized.unitsInPlay + normalized.unitsDestroyed;
     const airUsed = hasPoolCounters ? Math.max(0, DECK.air_strike.total - normalized.airStrike) : 0;
-    const usedByBoard = hasUnitCounters ? unitUsed + airUsed : null;
+    const usedByBoard = hasUnitCounters ? battlefieldUnitActivity + airUsed : null;
     const leftByPool = hasPoolCounters ? normalized.deck + normalized.hand + normalized.airStrike : null;
     const usedByPool = leftByPool == null ? null : Math.max(0, 26 - leftByPool);
-    const used = usedByBoard ?? usedByPool ?? 0;
+    const used = usedByPool ?? usedByBoard ?? 0;
     return {
       counters: normalized,
-      unitUsed,
+      unitUsed: usedByPool == null ? battlefieldUnitActivity : Math.max(0, 24 - normalized.deck - normalized.hand),
+      battlefieldUnitActivity,
       airUsed,
       used,
       left: Math.max(0, 26 - used),
       usedByBoard,
       usedByPool,
       leftByPool,
-      source: usedByBoard == null ? 'deck-hand-air-public-pool' : 'units-board-destroyed-plus-air',
-      warnings: usedByBoard != null && usedByPool != null && usedByBoard !== usedByPool
-        ? [`public counter mismatch: board/destroyed says ${usedByBoard} used, deck/hand/air pool says ${usedByPool} used`]
-        : [],
+      source: usedByPool == null ? 'battlefield-activity-fallback' : 'deck-hand-air-public-pool',
+      warnings: [],
     };
   }
 
@@ -693,9 +692,19 @@
     const opponentPossibleLeftTotal = Object.entries(rows)
       .filter(([key]) => key !== 'air_strike')
       .reduce((sum, [, row]) => sum + row.opponentLeftTotal, 0);
+    const opponentCandidatePool = Math.max(opponentProbabilities.unknownPoolSize, opponentPossibleLeftTotal);
+    const opponentCandidateMissing = Math.max(0, opponentPossibleLeftTotal - opponentProbabilities.unknownPoolSize);
     const opponentProbabilityWarnings = opponentPossibleLeftTotal > opponentProbabilities.unknownPoolSize
       ? [`opponent possible cards ${opponentPossibleLeftTotal} exceed public hidden pool ${opponentProbabilities.unknownPoolSize}; visible live log is incomplete`]
       : [];
+    for (const [key, row] of Object.entries(rows)) {
+      row.opponentCandidateProbability = key === 'air_strike'
+        ? row.opponentHandProbability
+        : probabilityAtLeastOne(opponentCandidatePool, row.opponentLeftTotal, opponentProbabilities.handSize);
+      row.opponentProbabilitySource = opponentProbabilityWarnings.length
+        ? 'candidate-estimate-from-incomplete-live-log'
+        : 'public-pool';
+    }
     return {
       rows,
       own: {
@@ -729,6 +738,8 @@
         hiddenHandLabel: `Opponent hidden hand: ${opponentProbabilities.handSize} card${opponentProbabilities.handSize === 1 ? '' : 's'}`,
         probabilityPoolLabel: `probabilities over ${opponentProbabilities.unknownPoolSize} unseen unit cards`,
         possibleLeftTotal: opponentPossibleLeftTotal,
+        candidatePool: opponentCandidatePool,
+        candidateMissing: opponentCandidateMissing,
         probabilityOk: opponentProbabilityWarnings.length === 0,
         probabilityWarnings: opponentProbabilityWarnings,
         reconciliation: {

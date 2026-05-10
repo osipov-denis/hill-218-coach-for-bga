@@ -195,6 +195,10 @@ test('opponent probabilities block when log-derived possible cards exceed public
   assert.equal(table.opponent.publicUnknownPool, 3);
   assert.equal(table.opponent.possibleLeftTotal, 4);
   assert.equal(table.opponent.probabilityOk, false);
+  assert.equal(table.opponent.candidatePool, 4);
+  assert.equal(table.opponent.candidateMissing, 1);
+  assert.equal(table.rows.infantry.opponentProbabilitySource, 'candidate-estimate-from-incomplete-live-log');
+  assert.equal(table.rows.infantry.opponentCandidateProbability, 1);
   assert.match(table.opponent.probabilityWarnings.join('\n'), /possible cards 4 exceed public hidden pool 3/);
 });
 
@@ -219,7 +223,8 @@ test('content labels separate exact own hand, log used-left, and opponent hidden
   assert.match(content, /Opp hidden hand/);
   assert.match(content, /hiddenHandTotal/);
   assert.match(content, /probabilityOk/);
-  assert.match(content, /blocked/);
+  assert.match(content, /uncertain candidate estimate/);
+  assert.match(content, /opponentCandidateProbability/);
 });
 
 test('buildPlayerCardTable flags exact visible hand mismatch when own deck is empty', () => {
@@ -335,6 +340,23 @@ test('public counter reconciliation accepts matching unit and air-strike usage',
   assert.equal(table.own.reconciliation.ok, true);
   assert.equal(table.own.reconciliation.publicUsage.used, 3);
   assert.equal(table.own.reconciliation.publicUsage.left, 23);
+});
+
+test('public usage treats units-destroyed as kill/activity counter, not owner spent cards', () => {
+  const usage = model.publicUsageFromCounters({
+    deck: 0,
+    hand: 2,
+    airStrike: 0,
+    unitsInPlay: 10,
+    unitsDestroyed: 14,
+  });
+
+  assert.equal(usage.used, 24);
+  assert.equal(usage.left, 2);
+  assert.equal(usage.usedByPool, 24);
+  assert.equal(usage.usedByBoard, 26);
+  assert.equal(usage.source, 'deck-hand-air-public-pool');
+  assert.deepEqual(usage.warnings, []);
 });
 
 test('probability examples match M5 used-left math', () => {
