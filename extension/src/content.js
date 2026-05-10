@@ -1,5 +1,5 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-10-repeated-live-log-rows-v2';
+  const WIDGET_VERSION = '2026-05-10-repeated-live-log-rows-v3';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
@@ -24,7 +24,7 @@
   panel.innerHTML = `
     <header id="hill218-coach-header">
       <strong>Hill 218 Coach</strong>
-      <span class="hill218-subtitle">read-only Chrome/Arc card counter</span>
+      <span class="hill218-subtitle">read-only card counter · build ${WIDGET_VERSION}</span>
       <button id="hill218-minimize" title="Minimize">–</button>
     </header>
     <div id="hill218-body">
