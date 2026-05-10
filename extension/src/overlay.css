@@ -20,6 +20,13 @@
   display: flex;
   flex-direction: column;
 }
+#hill218-coach-panel.hill218-collapsed {
+  width: auto;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  resize: none;
+  border-radius: 999px;
+}
 #hill218-coach-header {
   cursor: move;
   display: flex;
@@ -27,6 +34,13 @@
   gap: 8px;
   padding: 9px 12px;
   background: rgba(25, 31, 52, 0.98);
+}
+#hill218-coach-panel.hill218-collapsed #hill218-coach-header {
+  cursor: pointer;
+  padding: 8px 10px 8px 12px;
+}
+#hill218-coach-panel.hill218-collapsed .hill218-subtitle {
+  display: none;
 }
 .hill218-subtitle { opacity: 0.72; font-size: 11px; flex: 1; }
 #hill218-minimize, #hill218-scan, #hill218-parse, #hill218-sample, #hill218-copy-diag, #hill218-clear, #hill218-copy-status {

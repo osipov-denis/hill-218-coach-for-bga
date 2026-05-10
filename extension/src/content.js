@@ -1,12 +1,11 @@
 (function () {
-  const WIDGET_VERSION = '2026-05-10-counter-first-ux-v5';
+  const WIDGET_VERSION = '2026-05-10-launcher-gated-v6';
   const existingPanel = document.querySelector('#hill218-coach-panel');
   if (existingPanel && existingPanel.dataset.version !== WIDGET_VERSION) {
     existingPanel.remove();
     window.__hill218CoachInjected = false;
   }
   if (window.__hill218CoachInjected) return;
-  window.__hill218CoachInjected = true;
 
   const model = window.Hill218CardModel;
   if (!model) return;
@@ -17,6 +16,24 @@
     '.card', '.hand-card[data-id][data-type][data-color]', '.deck-count', '.hand-count',
     '.air-strike-count', '.units-in-play', '.units-destroyed'
   ];
+
+  function isBgaHill218RuntimePage() {
+    const href = location.href;
+    const title = document.title || '';
+    const bodyText = (document.body?.innerText || document.body?.textContent || '').slice(0, 5000);
+    const pageText = `${title}\n${bodyText}`;
+    const isLiveGame = /\/(?:\d+\/)?battleforhill(?:[/?#]|$)/i.test(href) && /[?&]table=\d+/i.test(href);
+    const isReview = /\/gamereview(?:[/?#]|$)/i.test(href) && /\bThe Battle for Hill 218\b/i.test(pageText);
+    const isReplay = /\/archive\/replay\//i.test(href) && /\bThe Battle for Hill 218\b/i.test(pageText);
+    if (!isLiveGame && !isReview && !isReplay) return false;
+    return Boolean(
+      document.querySelector('.deck-count, .hand-count, .battlefield-position[data-x][data-y], .game_move_notif, #logs .log')
+      || /\b(?:Game log|Replay last moves|The Battle for Hill 218)\b/i.test(pageText)
+    );
+  }
+
+  if (!isBgaHill218RuntimePage()) return;
+  window.__hill218CoachInjected = true;
 
   const panel = document.createElement('section');
   panel.id = 'hill218-coach-panel';
@@ -53,6 +70,7 @@
 
   const header = panel.querySelector('#hill218-coach-header');
   const body = panel.querySelector('#hill218-body');
+  const minimizeButton = panel.querySelector('#hill218-minimize');
   const output = panel.querySelector('#hill218-output');
   const input = panel.querySelector('#hill218-log-input');
   const scanStatus = panel.querySelector('#hill218-scan-status');
@@ -107,6 +125,7 @@
   }, true);
 
   applyDetailsOpenState(panel);
+  setPanelOpen(false);
 
   function pageDiagnostics() {
     const selectors = BGA_SELECTORS.map((selector) => {
@@ -526,6 +545,15 @@
     lastScanSignature = currentPageSignature();
   }
 
+  function setPanelOpen(open, { scan = false } = {}) {
+    body.hidden = !open;
+    panel.classList.toggle('hill218-collapsed', !open);
+    minimizeButton.textContent = open ? '–' : '+';
+    minimizeButton.title = open ? 'Collapse widget' : 'Open Hill 218 card counter';
+    header.title = open ? 'Drag Hill 218 Coach' : 'Open Hill 218 card counter';
+    if (open && scan && !lastScanSignature) scanNow('manual');
+  }
+
   function buildStatusReport() {
     const text = output.textContent || output.innerText || '';
     const quality = text.match(/Quality:[^\n]+/)?.[0] || 'Quality: unknown';
@@ -551,6 +579,7 @@
   let lastScanSignature = '';
   let scanTimer = null;
   function scheduleScan(reason = 'auto') {
+    if (body.hidden) return;
     clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
       const signature = currentPageSignature();
@@ -594,18 +623,19 @@
     }
   });
   panel.querySelector('#hill218-minimize').addEventListener('click', () => {
-    body.hidden = !body.hidden;
-    const minimize = panel.querySelector('#hill218-minimize');
-    minimize.textContent = body.hidden ? '+' : '–';
-    minimize.title = body.hidden ? 'Expand widget' : 'Collapse widget';
+    setPanelOpen(body.hidden, { scan: body.hidden });
   });
 
   let drag = null;
   header.addEventListener('mousedown', (event) => {
-    if (event.target.tagName === 'BUTTON') return;
+    if (body.hidden || event.target.tagName === 'BUTTON') return;
     const rect = panel.getBoundingClientRect();
     drag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     event.preventDefault();
+  });
+  header.addEventListener('click', (event) => {
+    if (!body.hidden || event.target.tagName === 'BUTTON') return;
+    setPanelOpen(true, { scan: true });
   });
   window.addEventListener('mousemove', (event) => {
     if (!drag) return;
@@ -627,7 +657,7 @@
     attributeFilter: ['class', 'style', 'data-type', 'data-id']
   });
   window.setInterval(() => scheduleScan('auto'), 3000);
-  window.setTimeout(() => scanNow('auto'), 1000);
+  window.setTimeout(() => { if (!body.hidden) scanNow('auto'); }, 1000);
 
   render(model.parseLog(''));
 })();
